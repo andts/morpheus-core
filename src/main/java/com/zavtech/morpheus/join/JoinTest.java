@@ -1,10 +1,12 @@
 package com.zavtech.morpheus.join;
 
 import com.zavtech.morpheus.frame.DataFrame;
+import com.zavtech.morpheus.frame.DataFrameColumns;
 import com.zavtech.morpheus.frame.DataFrameCursor;
 import com.zavtech.morpheus.frame.DataFrameRow;
 
 import java.math.BigInteger;
+import java.util.Arrays;
 
 /**
  * 1. Implement all known join algorithm.
@@ -39,66 +41,132 @@ public class JoinTest {
             options.setRowKeyParser(BigInteger.class, row -> new BigInteger(row[0]));
         });
 
-        DataFrame<BigInteger, String> joined = loopJoin(events, venues,
+        long start1 = System.currentTimeMillis();
+        DataFrame<BigInteger, String> joined11 = loopJoin(venues, events,
             (left, right) -> left.getValue("venueid").equals(right.getValue("venueid")));
+        long end1 = System.currentTimeMillis();
+        System.out.println("duration1() = " + (end1 - start1));
 
-        joined.out().print(500);
+        long start2 = System.currentTimeMillis();
+        DataFrame<BigInteger, String> joined12 = sortMergeJoin(venues, events, "venueid");
+        long end2 = System.currentTimeMillis();
+        System.out.println("duration2() = " + (end2 - start2));
+
+        String[] cols = joined11.cols().keys().skip(1).toArray(String[]::new);
+
+//        soutv
+        joined11 = joined11.rows().sort(true, Arrays.asList("venueid", "eventid"));
+        joined12 = joined12.rows().sort(true, Arrays.asList("venueid", "eventid"));
+
+        joined11.out().print(500);
         System.out.println();
-
-        DataFrame<BigInteger, String> joined2 = loopJoin(joined, categories,
-            (left, right) -> left.getValue("catid").equals(right.getValue("catid")));
-        joined2.out().print(500);
+        System.out.println("joined11 = " + joined11.rowCount());
+        joined12.out().print(500);
         System.out.println();
+        System.out.println("joined12 = " + joined12.rowCount());
 
-        long start = System.currentTimeMillis();
-        System.out.println("start() = " + start);
-        DataFrame<BigInteger, String> joined3 = loopJoin(listings, joined2,
-            (left, right) -> left.getValue("eventid").equals(right.getValue("eventid")));
-        long end = System.currentTimeMillis();
-        System.out.println("duration() = " + (end - start));
-        joined3.out().print(500);
-        System.out.println();
+        System.out.println("equals = " + dfEquals(joined11, joined12));
 
-        System.out.println(venues.rows().count());
-        System.out.println(events.rows().count());
-        System.out.println(listings.rows().count());
-        System.out.println(joined.rows().count());
-        System.out.println(joined2.rows().count());
-        System.out.println(joined3.rows().count());
+//
+//        DataFrame<BigInteger, String> joined2 = loopJoin(joined11, categories,
+//            (left, right) -> left.getValue("catid").equals(right.getValue("catid")));
+////        joined2.out().print(500);
+////        System.out.println();
+//
+//        long start = System.currentTimeMillis();
+//        System.out.println("start1() = " + start1);
+//        DataFrame<BigInteger, String> joined31 = loopJoin(listings, joined2,
+//            (left, right) -> left.getValue("eventid").equals(right.getValue("eventid")));
+//        long end = System.currentTimeMillis();
+//        System.out.println("duration1() = " + (end - start));
+//
+////        long start2 = System.currentTimeMillis();
+////        System.out.println("start2() = " + start2);
+////        DataFrame<BigInteger, String> joined32 = sortMergeJoin(listings, joined2, "eventid");
+////        long end2 = System.currentTimeMillis();
+////        System.out.println("duration2() = " + (end2 - start2));
+//
+//        joined31.out().print(500);
+//        System.out.println();
+//        System.out.println();
+////        joined32.out().print(500);
+////        System.out.println();
+////        System.out.println();
+//
+//        System.out.println(venues.rows().count());
+//        System.out.println(events.rows().count());
+//        System.out.println(listings.rows().count());
+//        System.out.println(joined11.rows().count());
+//        System.out.println(joined2.rows().count());
+//        System.out.println(joined3.rows().count());
     }
 
-    private static <C> DataFrame<BigInteger, C> loopJoin(DataFrame<BigInteger, C> left,
-                                                         DataFrame<BigInteger, C> right,
-                                                         JoinPredicate<C> joinPredicate) {
+    private static boolean dfEquals(DataFrame<BigInteger, String> joined11, DataFrame<BigInteger, String> joined12) {
+        for (int i=0; i<joined11.rowCount(); ++i) {
+            for (int j=0; j<joined11.colCount(); ++j) {
+                final Object value1 = joined11.data().getValue(i, j);
+                final Object value2 = joined12.data().getValue(i, j);
+                if (value1 == null && value2 != null) {
+                    return false;
+                } else if (value1 != null && !value1.equals(value2)) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    public static <C> DataFrame<BigInteger, C> loopJoin(DataFrame<BigInteger, C> left,
+                                                        DataFrame<BigInteger, C> right,
+                                                        JoinPredicate<C> joinPredicate) {
         DataFrame<BigInteger, C> result = DataFrame.empty();
         left.cols().forEach(col -> result.cols().add(col.key(), col.typeInfo()));
         right.cols().forEach(col -> result.cols().add(col.key(), col.typeInfo()));
 
+        DataFrameCursor<BigInteger, C> leftCursor = left.cursor();
+        DataFrameCursor<BigInteger, C> rightCursor = right.cursor();
         BigInteger index = BigInteger.ZERO;
-        for (DataFrameRow<BigInteger, C> leftRow : left.rows()) {
-            for (DataFrameRow<BigInteger, C> rightRow : right.rows()) {
+
+        int leftRowIndex = 0;
+        int leftRowCount = left.rowCount();
+
+        int rightRowIndex = 0;
+        int rightRowCount = right.rowCount();
+
+        DataFrameColumns<BigInteger, C> leftColumns = left.cols();
+        DataFrameColumns<BigInteger, C> rightColumns = right.cols();
+
+        while (leftRowIndex < leftRowCount) {
+            leftCursor.moveToRow(leftRowIndex);
+            DataFrameRow<BigInteger, C> leftRow = leftCursor.row();
+            rightRowIndex = 0;
+            while (rightRowIndex < rightRowCount) {
+                rightCursor.moveToRow(rightRowIndex);
+                DataFrameRow<BigInteger, C> rightRow = rightCursor.row();
+
                 if (joinPredicate.test(leftRow, rightRow)) {
                     result.rows().add(index,
                         value -> {
-                            if (left.cols().contains(value.colKey())) {
-                                return leftRow.getValue(value.colKey());
-                            } else if (right.cols().contains(value.colKey())) {
-                                return rightRow.getValue(value.colKey());
+                            if (leftColumns.contains(value.colKey())) {
+                                return leftCursor.moveToColumn(value.colKey()).getValue();
+                            } else if (rightColumns.contains(value.colKey())) {
+                                return rightCursor.moveToColumn(value.colKey()).getValue();
                             } else {
                                 throw new IllegalStateException();
                             }
                         });
                     index = index.add(BigInteger.ONE);
                 }
+                rightRowIndex++;
             }
+            leftRowIndex++;
         }
-
         return result;
     }
 
-    private static <C> DataFrame<BigInteger, C> sortMergeJoin(DataFrame<BigInteger, C> left,
-                                                              DataFrame<BigInteger, C> right,
-                                                              C joinColumn) {
+    public static <C> DataFrame<BigInteger, C> sortMergeJoin(DataFrame<BigInteger, C> left,
+                                                             DataFrame<BigInteger, C> right,
+                                                             C joinColumn) {
         DataFrame<BigInteger, C> sortedLeft = copyAndSort(left, joinColumn);
         DataFrame<BigInteger, C> sortedRight = copyAndSort(right, joinColumn);
         DataFrame<BigInteger, C> result = DataFrame.empty();
@@ -114,34 +182,35 @@ public class JoinTest {
         int rightRowCount = sortedRight.rowCount();
 
         DataFrameCursor<BigInteger, C> leftCursor = sortedLeft.cursor();
-        DataFrameCursor<BigInteger, C> rightCursor = sortedLeft.cursor();
+        DataFrameCursor<BigInteger, C> rightCursor = sortedRight.cursor();
 
-        while (leftRowIndex < leftRowCount) {
+        DataFrameColumns<BigInteger, C> leftColumns = sortedLeft.cols();
+        DataFrameColumns<BigInteger, C> rightColumns = sortedRight.cols();
+
+        while (leftRowIndex < leftRowCount && rightRowIndex < rightRowCount) {
             leftCursor.moveToRow(leftRowIndex);
+            rightCursor.moveToRow(rightRowIndex);
 
-            while (rightRowIndex < rightRowCount) {
-                rightCursor.moveToRow(rightRowIndex);
+            Comparable leftVal = leftCursor.moveToColumn(joinColumn).getValue();
+            Comparable rightVal = rightCursor.moveToColumn(joinColumn).getValue();
 
-                Comparable leftVal = leftCursor.moveToColumn(joinColumn).getValue();
-                Comparable rightVal = leftCursor.moveToColumn(joinColumn).getValue();
-
-                if (leftVal.compareTo(rightVal) == 0) {
-                    result.rows().add(index,
-                        value -> {
-                            if (sortedLeft.cols().contains(value.colKey())) {
-                                return leftCursor.row().getValue(value.colKey());
-                            } else if (sortedRight.cols().contains(value.colKey())) {
-                                return rightCursor.row().getValue(value.colKey());
-                            } else {
-                                throw new IllegalStateException();
-                            }
-                        });
-                    index = index.add(BigInteger.ONE);
-                } else if (leftVal.compareTo(rightVal) < 0) {
-                    leftRowIndex++;
-                } else if (leftVal.compareTo(rightVal) > 0) {
-                    rightRowIndex++;
-                }
+            if (leftVal.compareTo(rightVal) == 0) {
+                result.rows().add(index,
+                    value -> {
+                        if (leftColumns.contains(value.colKey())) {
+                            return leftCursor.moveToColumn(value.colKey()).getValue();
+                        } else if (rightColumns.contains(value.colKey())) {
+                            return rightCursor.moveToColumn(value.colKey()).getValue();
+                        } else {
+                            throw new IllegalStateException();
+                        }
+                    });
+                index = index.add(BigInteger.ONE);
+                rightRowIndex++;
+            } else if (leftVal.compareTo(rightVal) < 0) {
+                leftRowIndex++;
+            } else if (leftVal.compareTo(rightVal) > 0) {
+                rightRowIndex++;
             }
         }
 
@@ -153,11 +222,11 @@ public class JoinTest {
     }
 
     @FunctionalInterface
-    private interface JoinPredicate<T> {
+    public interface JoinPredicate<T> {
         boolean test(DataFrameRow<BigInteger, T> leftRow, DataFrameRow<BigInteger, T> rightRow);
     }
 
-    private enum JoinType {
+    public enum JoinType {
         INNER, LEFT_OUTER, RIGHT_OUTER, FULL_OUTER, CROSS
     }
 }
