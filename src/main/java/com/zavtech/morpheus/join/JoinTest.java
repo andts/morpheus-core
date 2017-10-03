@@ -1,6 +1,7 @@
 package com.zavtech.morpheus.join;
 
 import com.zavtech.morpheus.frame.DataFrame;
+import com.zavtech.morpheus.frame.DataFrameCursor;
 import com.zavtech.morpheus.frame.DataFrameRow;
 
 import java.math.BigInteger;
@@ -105,20 +106,41 @@ public class JoinTest {
         right.cols().forEach(col -> result.cols().add(col.key(), col.typeInfo()));
 
         BigInteger index = BigInteger.ZERO;
-        for (DataFrameRow<BigInteger, C> leftRow : left.rows()) {
-            for (DataFrameRow<BigInteger, C> rightRow : right.rows()) {
-                if (joinPredicate.test(leftRow, rightRow)) {
+
+        int leftRowIndex = 0;
+        int leftRowCount = sortedLeft.rowCount();
+
+        int rightRowIndex = 0;
+        int rightRowCount = sortedRight.rowCount();
+
+        DataFrameCursor<BigInteger, C> leftCursor = sortedLeft.cursor();
+        DataFrameCursor<BigInteger, C> rightCursor = sortedLeft.cursor();
+
+        while (leftRowIndex < leftRowCount) {
+            leftCursor.moveToRow(leftRowIndex);
+
+            while (rightRowIndex < rightRowCount) {
+                rightCursor.moveToRow(rightRowIndex);
+
+                Comparable leftVal = leftCursor.moveToColumn(joinColumn).getValue();
+                Comparable rightVal = leftCursor.moveToColumn(joinColumn).getValue();
+
+                if (leftVal.compareTo(rightVal) == 0) {
                     result.rows().add(index,
                         value -> {
-                            if (left.cols().contains(value.colKey())) {
-                                return leftRow.getValue(value.colKey());
-                            } else if (right.cols().contains(value.colKey())) {
-                                return rightRow.getValue(value.colKey());
+                            if (sortedLeft.cols().contains(value.colKey())) {
+                                return leftCursor.row().getValue(value.colKey());
+                            } else if (sortedRight.cols().contains(value.colKey())) {
+                                return rightCursor.row().getValue(value.colKey());
                             } else {
                                 throw new IllegalStateException();
                             }
                         });
                     index = index.add(BigInteger.ONE);
+                } else if (leftVal.compareTo(rightVal) < 0) {
+                    leftRowIndex++;
+                } else if (leftVal.compareTo(rightVal) > 0) {
+                    rightRowIndex++;
                 }
             }
         }
