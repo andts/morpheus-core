@@ -95,6 +95,41 @@ public class JoinTest {
         return result;
     }
 
+    private static <C> DataFrame<BigInteger, C> sortMergeJoin(DataFrame<BigInteger, C> left,
+                                                              DataFrame<BigInteger, C> right,
+                                                              C joinColumn) {
+        DataFrame<BigInteger, C> sortedLeft = copyAndSort(left, joinColumn);
+        DataFrame<BigInteger, C> sortedRight = copyAndSort(right, joinColumn);
+        DataFrame<BigInteger, C> result = DataFrame.empty();
+        left.cols().forEach(col -> result.cols().add(col.key(), col.typeInfo()));
+        right.cols().forEach(col -> result.cols().add(col.key(), col.typeInfo()));
+
+        BigInteger index = BigInteger.ZERO;
+        for (DataFrameRow<BigInteger, C> leftRow : left.rows()) {
+            for (DataFrameRow<BigInteger, C> rightRow : right.rows()) {
+                if (joinPredicate.test(leftRow, rightRow)) {
+                    result.rows().add(index,
+                        value -> {
+                            if (left.cols().contains(value.colKey())) {
+                                return leftRow.getValue(value.colKey());
+                            } else if (right.cols().contains(value.colKey())) {
+                                return rightRow.getValue(value.colKey());
+                            } else {
+                                throw new IllegalStateException();
+                            }
+                        });
+                    index = index.add(BigInteger.ONE);
+                }
+            }
+        }
+
+        return result;
+    }
+
+    private static <C> DataFrame<BigInteger, C> copyAndSort(DataFrame<BigInteger, C> dataFrame, C sortColumn) {
+        return dataFrame.copy().rows().parallel().sort(true, sortColumn);
+    }
+
     @FunctionalInterface
     private interface JoinPredicate<T> {
         boolean test(DataFrameRow<BigInteger, T> leftRow, DataFrameRow<BigInteger, T> rightRow);
