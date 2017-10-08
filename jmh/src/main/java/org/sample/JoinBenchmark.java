@@ -64,12 +64,17 @@ public class JoinBenchmark {
 
     @Benchmark
     public DataFrame<BigInteger, String> testLoopJoin() {
-        return JoinTest.loopJoin(events, venues,
+        return JoinTest.loopJoin(venues, events,
             (left, right) -> left.getValue("venueid").equals(right.getValue("venueid")));
     }
 
     @Benchmark
-    public DataFrame<BigInteger, String> testSortJoin() {
-        return JoinTest.sortMergeJoin(venues, events, "venueid");
+    public DataFrame<BigInteger, String> testSortJoinSimple() {
+        return JoinTest.sortMergeJoinSimple(venues, events, "venueid");
+    }
+
+    @Benchmark
+    public DataFrame<BigInteger, String> testSortJoinFull() {
+        return JoinTest.sortMergeJoinFull(venues, events, "venueid");
     }
 }

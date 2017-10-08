@@ -1,0 +1,22 @@
+catid,catgroup,catname  ,catdesc
+1    ,Sports  ,LMLB1      ,Major League Baseball
+1    ,Sports  ,LMLB2      ,Major League Baseball
+2    ,Sports  ,LNHL1      ,National Hockey League
+3    ,Sports  ,LNFL1      ,National Football League
+4    ,Sports  ,LNBA1      ,National Basketball Association
+5    ,Sports  ,LMLS1      ,Major League Soccer
+5    ,Sports  ,LMLS2      ,Major League Soccer
+5    ,Sports  ,LMLS3      ,Major League Soccer
+5    ,Sports  ,LMLS4      ,Major League Soccer
+6    ,Shows   ,LMusicals1 ,Musical theatre
+7    ,Shows   ,LPlays1    ,All non-musical theatre
+8    ,Shows   ,LOpera1    ,All opera and light opera
+8    ,Shows   ,LOpera2    ,All opera and light opera
+8    ,Shows   ,LOpera3    ,All opera and light opera
+8    ,Shows   ,LOpera4    ,All opera and light opera
+9    ,Concerts,LPop1      ,All rock and pop music concerts
+10   ,Concerts,LJazz1     ,All jazz singers and bands
+10   ,Concerts,LJazz2     ,All jazz singers and bands
+10   ,Concerts,LJazz3     ,All jazz singers and bands
+10   ,Concerts,LJazz4     ,All jazz singers and bands
+11   ,Concerts,LClassical1,"All symphony,concerto,and choir concerts"

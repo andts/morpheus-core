@@ -1,0 +1,17 @@
+catid,catgroup,catname  ,catdesc
+1    ,Sports  ,RMLB      ,Major League Baseball
+1    ,Sports  ,RMLB      ,Major League Baseball
+2    ,Sports  ,RNHL      ,National Hockey League
+3    ,Sports  ,RNFL      ,National Football League
+3    ,Sports  ,RNFL      ,National Football League
+3    ,Sports  ,RNFL      ,National Football League
+4    ,Sports  ,RNBA      ,National Basketball Association
+5    ,Sports  ,RMLS      ,Major League Soccer
+5    ,Sports  ,RMLS      ,Major League Soccer
+5    ,Sports  ,RMLS      ,Major League Soccer
+7    ,Shows   ,RPlays    ,All non-musical theatre
+7    ,Shows   ,RPlays    ,All non-musical theatre
+9    ,Concerts,RPop      ,All rock and pop music concerts
+9    ,Concerts,RPop      ,All rock and pop music concerts
+9    ,Concerts,RPop      ,All rock and pop music concerts
+11   ,Concerts,RClassical,"All symphony,concerto,and choir concerts"
