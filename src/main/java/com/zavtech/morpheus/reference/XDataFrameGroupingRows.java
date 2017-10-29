@@ -164,6 +164,11 @@ class XDataFrameGroupingRows<R,C> implements DataFrameGrouping.Rows<R,C> {
     }
 
     @Override
+    public boolean hasGroup(Tuple groupKey) {
+        return groupKeysMap.containsKey(groupKey);
+    }
+
+    @Override
     public final void forEach(int level, BiConsumer<Tuple,DataFrame<R,C>> groupConsumer) {
         this.getGroupKeys(level).forEach(groupKey -> {
             try {

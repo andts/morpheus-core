@@ -56,25 +56,43 @@ public class JoinBenchmark {
             options.setResource(Resource.of(this.getClass().getClassLoader().getResource("venue.csv")));
             options.setRowKeyParser(BigInteger.class, row -> new BigInteger(row[0]));
         });
+        venues.rows().sort(true, "venuename");
         events = DataFrame.read().csv(options -> {
             options.setResource(Resource.of(this.getClass().getClassLoader().getResource("event.csv")));
             options.setRowKeyParser(BigInteger.class, row -> new BigInteger(row[0]));
         });
+        events.rows().sort(false, "eventname");
     }
 
     @Benchmark
-    public DataFrame<BigInteger, String> testLoopJoin() {
+    public DataFrame<BigInteger, String> testLoopJoinVenuesToEvents() {
         return JoinTest.loopJoin(venues, events,
             (left, right) -> left.getValue("venueid").equals(right.getValue("venueid")));
     }
 
     @Benchmark
-    public DataFrame<BigInteger, String> testSortJoinSimple() {
-        return JoinTest.sortMergeJoinSimple(venues, events, "venueid");
+    public DataFrame<BigInteger, String> testLoopJoinEventsToVenues() {
+        return JoinTest.loopJoin(events, venues,
+            (left, right) -> left.getValue("venueid").equals(right.getValue("venueid")));
     }
 
     @Benchmark
-    public DataFrame<BigInteger, String> testSortJoinFull() {
-        return JoinTest.sortMergeJoinFull(venues, events, "venueid");
+    public DataFrame<BigInteger, String> testHashJoinVenuesToEvents() {
+        return JoinTest.hashJoin(venues, events, "venueid");
+    }
+
+    @Benchmark
+    public DataFrame<BigInteger, String> testHashJoinEventsToVenues() {
+        return JoinTest.hashJoin(events, venues, "venueid");
+    }
+
+    @Benchmark
+    public DataFrame<BigInteger, String> testSortJoinVenuesToEvents() {
+        return JoinTest.sortMergeJoin(venues, events, "venueid");
+    }
+
+    @Benchmark
+    public DataFrame<BigInteger, String> testSortJoinEventsToVenues() {
+        return JoinTest.sortMergeJoin(events, venues, "venueid");
     }
 }

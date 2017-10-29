@@ -1,13 +1,9 @@
 package com.zavtech.morpheus.join;
 
-import com.zavtech.morpheus.frame.DataFrame;
-import com.zavtech.morpheus.frame.DataFrameColumns;
-import com.zavtech.morpheus.frame.DataFrameCursor;
-import com.zavtech.morpheus.frame.DataFrameRow;
+import com.zavtech.morpheus.frame.*;
+import com.zavtech.morpheus.util.Tuple;
 
 import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
-import java.io.FileWriter;
 import java.math.BigInteger;
 import java.util.Arrays;
 
@@ -51,7 +47,7 @@ public class JoinTest {
         System.out.println("duration1() = " + (end1 - start1));
 
         long start2 = System.currentTimeMillis();
-        DataFrame<BigInteger, String> joined12 = sortMergeJoinSimple(venues, events, "venueid");
+        DataFrame<BigInteger, String> joined12 = sortMergeJoin(venues, events, "venueid");
         long end2 = System.currentTimeMillis();
         System.out.println("duration2() = " + (end2 - start2));
 
@@ -120,21 +116,21 @@ public class JoinTest {
         System.out.println("duration1() = " + (end1 - start1));
 
         long start2 = System.currentTimeMillis();
-        DataFrame<BigInteger, String> sortJoined = sortMergeJoinFull(testLeft, testRight, "venueid");
+        DataFrame<BigInteger, String> sortJoined = sortMergeJoin(testLeft, testRight, "venueid");
         long end2 = System.currentTimeMillis();
         System.out.println("duration2() = " + (end2 - start2));
 
         long start3 = System.currentTimeMillis();
-        DataFrame<BigInteger, String> sortSimpleJoined = sortMergeJoinSimple(testLeft, testRight, "venueid");
+        DataFrame<BigInteger, String> hashJoined = hashJoin(testRight, testLeft, "venueid");
         long end3 = System.currentTimeMillis();
         System.out.println("duration3() = " + (end3 - start3));
 
         loopJoined = loopJoined.rows().sort(true, Arrays.asList("venueid", "eventid"));
         sortJoined = sortJoined.rows().sort(true, Arrays.asList("venueid", "eventid"));
-        sortSimpleJoined = sortSimpleJoined.rows().sort(true, Arrays.asList("venueid", "eventid"));
+        hashJoined = hashJoined.rows().sort(true, Arrays.asList("venueid", "eventid"));
 
         System.out.println("equals(sort, loop) = " + dfDataEquals(loopJoined, sortJoined));
-        System.out.println("equals(sort1, sort2) = " + dfDataEquals(sortSimpleJoined, sortJoined));
+        System.out.println("equals(sort, hash) = " + dfDataEquals(sortJoined, hashJoined));
 //        System.out.println("");
 //        System.out.println("Loop:");
 //        loopJoined.out().print(500_000, new FileOutputStream("loopJoin.txt"));
@@ -162,9 +158,7 @@ public class JoinTest {
     public static <C> DataFrame<BigInteger, C> loopJoin(DataFrame<BigInteger, C> left,
                                                         DataFrame<BigInteger, C> right,
                                                         JoinPredicate<C> joinPredicate) {
-        DataFrame<BigInteger, C> result = DataFrame.empty();
-        left.cols().forEach(col -> result.cols().add(col.key(), col.typeInfo()));
-        right.cols().forEach(col -> result.cols().add(col.key(), col.typeInfo()));
+        DataFrame<BigInteger, C> result = createEmptyResult(left, right);
 
         DataFrameCursor<BigInteger, C> leftCursor = left.cursor();
         DataFrameCursor<BigInteger, C> rightCursor = right.cursor();
@@ -188,16 +182,7 @@ public class JoinTest {
                 DataFrameRow<BigInteger, C> rightRow = rightCursor.row();
 
                 if (joinPredicate.test(leftRow, rightRow)) {
-                    result.rows().add(index,
-                        value -> {
-                            if (leftColumns.contains(value.colKey())) {
-                                return leftCursor.moveToColumn(value.colKey()).getValue();
-                            } else if (rightColumns.contains(value.colKey())) {
-                                return rightCursor.moveToColumn(value.colKey()).getValue();
-                            } else {
-                                throw new IllegalStateException();
-                            }
-                        });
+                    addJoinedRow(result, index, leftCursor, rightCursor, leftColumns, rightColumns);
                     index = index.add(BigInteger.ONE);
                 }
                 rightRowIndex++;
@@ -207,67 +192,13 @@ public class JoinTest {
         return result;
     }
 
-    public static <C> DataFrame<BigInteger, C> sortMergeJoinSimple(DataFrame<BigInteger, C> left,
-                                                                   DataFrame<BigInteger, C> right,
-                                                                   C joinColumn) {
+    public static <C> DataFrame<BigInteger, C> sortMergeJoin(DataFrame<BigInteger, C> left,
+                                                             DataFrame<BigInteger, C> right,
+                                                             C joinColumn) {
         DataFrame<BigInteger, C> sortedLeft = copyAndSort(left, joinColumn);
         DataFrame<BigInteger, C> sortedRight = copyAndSort(right, joinColumn);
-        DataFrame<BigInteger, C> result = DataFrame.empty();
-        left.cols().forEach(col -> result.cols().add(col.key(), col.typeInfo()));
-        right.cols().forEach(col -> result.cols().add(col.key(), col.typeInfo()));
 
-        BigInteger index = BigInteger.ZERO;
-
-        int leftRowIndex = 0;
-        int leftRowCount = sortedLeft.rowCount();
-
-        int rightRowIndex = 0;
-        int rightRowCount = sortedRight.rowCount();
-
-        DataFrameCursor<BigInteger, C> leftCursor = sortedLeft.cursor();
-        DataFrameCursor<BigInteger, C> rightCursor = sortedRight.cursor();
-
-        DataFrameColumns<BigInteger, C> leftColumns = sortedLeft.cols();
-        DataFrameColumns<BigInteger, C> rightColumns = sortedRight.cols();
-
-        while (leftRowIndex < leftRowCount && rightRowIndex < rightRowCount) {
-            leftCursor.moveToRow(leftRowIndex);
-            rightCursor.moveToRow(rightRowIndex);
-
-            Comparable leftVal = leftCursor.moveToColumn(joinColumn).getValue();
-            Comparable rightVal = rightCursor.moveToColumn(joinColumn).getValue();
-
-            if (leftVal.compareTo(rightVal) == 0) {
-                result.rows().add(index,
-                    value -> {
-                        if (leftColumns.contains(value.colKey())) {
-                            return leftCursor.moveToColumn(value.colKey()).getValue();
-                        } else if (rightColumns.contains(value.colKey())) {
-                            return rightCursor.moveToColumn(value.colKey()).getValue();
-                        } else {
-                            throw new IllegalStateException();
-                        }
-                    });
-                index = index.add(BigInteger.ONE);
-                rightRowIndex++;
-            } else if (leftVal.compareTo(rightVal) < 0) {
-                leftRowIndex++;
-            } else if (leftVal.compareTo(rightVal) > 0) {
-                rightRowIndex++;
-            }
-        }
-
-        return result;
-    }
-
-    public static <C> DataFrame<BigInteger, C> sortMergeJoinFull(DataFrame<BigInteger, C> left,
-                                                                 DataFrame<BigInteger, C> right,
-                                                                 C joinColumn) {
-        DataFrame<BigInteger, C> sortedLeft = copyAndSort(left, joinColumn);
-        DataFrame<BigInteger, C> sortedRight = copyAndSort(right, joinColumn);
-        DataFrame<BigInteger, C> result = DataFrame.empty();
-        left.cols().forEach(col -> result.cols().add(col.key(), col.typeInfo()));
-        right.cols().forEach(col -> result.cols().add(col.key(), col.typeInfo()));
+        DataFrame<BigInteger, C> result = createEmptyResult(left, right);
 
         BigInteger index = BigInteger.ZERO;
 
@@ -288,7 +219,6 @@ public class JoinTest {
         boolean cursorMoved = false;
 
         while (dataAvailable) {
-//            System.out.println(leftRowIndex + ", " + rightRowIndex);
             cursorMoved = false;
 
             leftCursor.moveToRow(leftRowIndex);
@@ -296,11 +226,9 @@ public class JoinTest {
 
             Comparable leftVal = leftCursor.moveToColumn(joinColumn).getValue();
             Comparable rightVal = rightCursor.moveToColumn(joinColumn).getValue();
-//            System.out.println("leftVal = " + leftVal);
-//            System.out.println("rightVal = " + rightVal);
-//            System.out.println("index = " + index);
 
             //if values are equal - join the rows
+            //otherwise - move one of the row indices
             if (leftVal.equals(rightVal)) {
                 addJoinedRow(result, index, leftCursor, rightCursor, leftColumns, rightColumns);
                 index = index.add(BigInteger.ONE);
@@ -308,58 +236,112 @@ public class JoinTest {
                 if (leftRowIndex + 1 < leftRowCount) {
                     leftRowIndex++;
                     cursorMoved = true;
-//                    System.out.println(1);
                 }
             } else if (leftVal.compareTo(rightVal) > 0) {
                 if (rightRowIndex + 1 < rightRowCount) {
                     rightRowIndex++;
                     currentRightGroupStartIndex = rightRowIndex;
                     cursorMoved = true;
-//                    System.out.println(2);
                 }
             }
 
             //move the cursors to next positions
             if (!cursorMoved) {
+                //perform lookahead(if possible) to check
+                //if we are still in the same join value group on the right table
+                //if true - move right cursor
                 if (rightRowIndex + 1 < rightRowCount) {
                     int nextRowIndex = rightRowIndex + 1;
                     Comparable nextRightValue = sortedRight.data().getValue(nextRowIndex, joinColumn);
-//                    System.out.println("nextRowIndex = " + nextRowIndex);
-//                    System.out.println("nextRightValue = " + nextRightValue);
                     if (rightVal.equals(nextRightValue)) {
                         rightRowIndex++;
                         cursorMoved = true;
-//                        System.out.println(3);
                     }
                 }
             }
 
             if (!cursorMoved) {
+                //perform lookahead(if possible) to check
+                //if we are in the same join value group on the left table
+                //if yes - move left cursor, and reset right cursor
+                //to the beginning of the value group on the right table
                 if (leftRowIndex + 1 < leftRowCount) {
                     Comparable nextLeftValue = sortedLeft.data().getValue(leftRowIndex + 1, joinColumn);
                     if (leftVal.equals(nextLeftValue)) {
                         leftRowIndex++;
                         rightRowIndex = currentRightGroupStartIndex;
                         cursorMoved = true;
-//                        System.out.println(4);
                     } else {
-                        //both next values are not same as current
-                        //or there is no next right value
+                        //next values for both tables are not in the same join value group
+                        //move both cursors to next values (for right table - only if there is next row)
                         leftRowIndex++;
                         if (rightRowIndex + 1 < rightRowCount) {
                             rightRowIndex++;
                             currentRightGroupStartIndex = rightRowIndex;
-//                            System.out.println(5);
                         }
                         cursorMoved = true;
-//                        System.out.println(6);
                     }
                 }
             }
 
+            //we were able to move the cursors, there is more data
             dataAvailable = cursorMoved;
         }
 
+        return result;
+    }
+
+    public static <C> DataFrame<BigInteger, C> hashJoin(DataFrame<BigInteger, C> left,
+                                                        DataFrame<BigInteger, C> right,
+                                                        C joinColumn) {
+        //noinspection unchecked
+        DataFrameGrouping.Rows<BigInteger, C> leftGrouped = left.rows().groupBy(joinColumn);
+
+        DataFrame<BigInteger, C> result = createEmptyResult(left, right);
+
+        DataFrameColumns<BigInteger, C> leftColumns = left.cols();
+        DataFrameColumns<BigInteger, C> rightColumns = right.cols();
+
+        DataFrameCursor<BigInteger, C> rightCursor = right.cursor();
+        BigInteger index = BigInteger.ZERO;
+
+        int rightRowIndex = 0;
+        int rightRowCount = right.rowCount();
+
+        while (rightRowIndex < rightRowCount) {
+            rightCursor.moveToRow(rightRowIndex);
+            DataFrameRow<BigInteger, C> rightRow = rightCursor.row();
+
+            Comparable rightVal = rightCursor.moveToColumn(joinColumn).getValue();
+
+            if (leftGrouped.hasGroup(Tuple.of(rightVal))) {
+                DataFrame<BigInteger, C> leftGroup = leftGrouped.getGroup(Tuple.of(rightVal));
+                DataFrameCursor<BigInteger, C> leftCursor = leftGroup.cursor();
+
+                int leftRowIndex = 0;
+                int leftRowCount = leftGroup.rowCount();
+
+                while (leftRowIndex < leftRowCount) {
+                    leftCursor.moveToRow(leftRowIndex);
+                    DataFrameRow<BigInteger, C> leftRow = leftCursor.row();
+
+                    if (leftRow.getValue(joinColumn).equals(rightRow.getValue(joinColumn))) {
+                        addJoinedRow(result, index, leftCursor, rightCursor, leftColumns, rightColumns);
+                        index = index.add(BigInteger.ONE);
+                    }
+                    leftRowIndex++;
+                }
+            }
+            rightRowIndex++;
+        }
+        return result;
+    }
+
+    private static <C> DataFrame<BigInteger, C> createEmptyResult(DataFrame<BigInteger, C> left,
+                                                                  DataFrame<BigInteger, C> right) {
+        DataFrame<BigInteger, C> result = DataFrame.empty();
+        left.cols().forEach(col -> result.cols().add(col.key(), col.typeInfo()));
+        right.cols().forEach(col -> result.cols().add(col.key(), col.typeInfo()));
         return result;
     }
 

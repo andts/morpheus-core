@@ -101,6 +101,13 @@ public interface DataFrameGrouping<R,C,S> {
     DataFrame<R,C> getGroup(Tuple groupKey);
 
     /**
+     * Returns {@code true} if the grouping has specified group
+     * @param groupKey  the group key
+     * @return          if the
+     */
+    boolean hasGroup(Tuple groupKey);
+
+    /**
      * A forEach implementation that processes each group
      * @param level     level 0 implies top level, 1 implies level below that, and so on
      * @param groupConsumer  the consumer to receive each group
